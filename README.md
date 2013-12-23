@@ -4,12 +4,17 @@ vim-tomato-md
 A Vim plugin to write daily pomodoro memo in markdown.
 It counts total pomodoros in `daily.md` and update done/todo/free/total numbers.
 
-# Usage
-## 1. Activate highlight and keymap
+# Requirements
+- [NeoBundle](https://github.com/Shougo/neobundle.vim)
+- vim ruby interface `if_ruby` (Enabled if `:echo has('ruby')` returns `1`)
+
+# Install
 Write the following settings to your .vimrc
 
 ```vimrc
 " tomato_md {{{
+  NeoBundle 'ikuo/vim-tomato-md'
+
   " Activate tomato_md when daily.md is opened.
   augroup TomatoMdActivate
     au!
@@ -24,12 +29,18 @@ Write the following settings to your .vimrc
 " }}}
 ```
 
-## 2. Write and update daily.md
+Install vim-tomato-md with neobundle.
+
+```
+:NeoBundleInstall
+```
+
+# Usage
 Save the following markdown as `daily.md` into your favorite directory:
 
 ```md
 # ====
-# 1/2 Mon 9m-11, 12-18m (done:0, lost:0, todo:0, free:0, total:0)
+# 10/31 Mon 9m-11, 12-18m (done:0, lost:0, todo:0, free:0, total:0)
 - Task1 [@][]
 - Task2 [][][]
 
@@ -39,13 +50,15 @@ Save the following markdown as `daily.md` into your favorite directory:
 Write your daily.md according to the format described in the following section.
 When you type Ctrl-p, counts of done/todo pomodoros will be updated in the day header.
 
-# Format of daily.md
-## Pomodoros
+## Format of daily.md
+`daily.md` describes a list of day sections. Each day section has pomodoros.
+
+### Pomodoro
 - `[]` is a pomodoro to do.
 - `[x]` is a pomodoro done.
 - `[@]` is a pomodoro to highlight. e.g. current or next.
 
-## Headers
+### Day Section Header
 The line begins with `# ====` separates days.
 Each day has a header line of the following format:
 
@@ -64,16 +77,3 @@ The meanings of elements of the latter part are:
 - `todo`: Number of pomodoros to do (Count of `[]`)
 - `free`: Number of pomodoros that can be done in the rest of this day.
 - `total`: Number of pomodoros that can be done in this day.
-
-# Example
-
-```md
-# ====
-# 1/8 Sun. 14-18, 19-21 (done:1, lost:1, todo:6, free:4, total:12)
-## Task1
-- [x][@][][] Subtask1
-- [][][] Subtask2
-
-# ====
-# 1/7 Sun. 14-18, 19-21 (done:7, lost:3, todo:0, free:2, total:12)
-...
