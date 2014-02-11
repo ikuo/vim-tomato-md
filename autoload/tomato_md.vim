@@ -2,11 +2,37 @@
 let s:save_cpo = &cpo
 set cpo&vim
 
+ruby << EOC
+module TomatoMd
+  PATTERNS = {
+    :tomatos => /\((done:[\d\.]+,.*total:[\d\.]+)\)/,
+  }.freeze
+
+  module Helper
+    # Public: Find specified pattern.
+    #
+    # Returns an array of [line number, matched string]
+    def find_matching_line(pattern, options = {})
+      line_number = options[:start] || $curbuf.line_number
+      while ((line_number > 0) && (line_number <= $curbuf.count) && $curbuf[line_number] !~ pattern)
+        if options[:direction] == :down
+          line_number += 1
+        else
+          line_number -= 1
+        end
+      end
+      [line_number, $1]
+    end
+  end
+end
+EOC
 
 " Rewrite header line.
 function! tomato_md#rewrite()
 ruby << EOC
-  pat_tomatos = /\((done:[\d\.]+,.*total:[\d\.]+)\)/
+  include TomatoMd::Helper
+
+  pat_tomatos = TomatoMd::PATTERNS[:tomatos]
   @pat_ranges = /(([\d\.]+m?\-[\d\.]+m?)(\s*,\s*[\d\.]+m?\-[\d\.]+m?)*)/
   @now_pivot = nil
 
@@ -88,14 +114,6 @@ ruby << EOC
     $curbuf[line_number] = $curbuf[line_number].gsub(pat_tomatos, updated)
   end
 
-  def find_matching_line(pattern)
-    line_number = $curbuf.line_number
-    while (line_number > 0 && $curbuf[line_number] !~ pattern)
-      line_number -= 1
-    end
-    [line_number, $1]
-  end
-
   line_number, match_data = find_matching_line(pat_tomatos)
 
   if line_number > 0
@@ -121,6 +139,47 @@ ruby << EOC
   else
     VIM::message("No status found.")
   end
+EOC
+endfunction
+
+" Postpone visual-selected text to the next day.
+function! tomato_md#postpone() range
+ruby << EOC
+  include TomatoMd::Helper
+
+  # Public: Move lines (<line_start> .. <line_end>) after line <append_to>
+  def move_lines(line_start, line_end, append_to)
+    VIM::message("Moving L:#{line_start}-#{line_end} after L:#{append_to}")
+    range = (line_start .. line_end)
+    n_lines = line_end - line_start
+    lines = range.map {|n| $curbuf[n] }
+    range.each {|n| $curbuf.delete(line_start) }
+
+    (0 .. n_lines).each do |line_num|
+      $curbuf.append(append_to + line_num, lines[line_num])
+    end
+
+    row, col = $curwin.cursor
+    $curwin.cursor = [row + n_lines, col]
+  end
+
+  def find_append_target
+    pat_tomatos = TomatoMd::PATTERNS[:tomatos]
+
+    tommorow, _ = find_matching_line(pat_tomatos)
+    tommorow, _ = find_matching_line(pat_tomatos, :start => (tommorow - 1))
+    sub_section_line, _ =
+      find_matching_line(/^#/, :start => (tommorow + 1), :direction => :down)
+
+    target = sub_section_line - 1
+    $curbuf[target].empty? ? (target - 1) : target
+  end
+
+  move_lines(
+    VIM::evaluate('a:firstline'),
+    VIM::evaluate('a:lastline'),
+    find_append_target
+  )
 EOC
 endfunction
 
