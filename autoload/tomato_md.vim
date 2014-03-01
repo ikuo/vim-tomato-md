@@ -12,6 +12,12 @@ module TomatoMd
   }.freeze
 
   module Helper
+    # Public: Update cursor position.
+    def update_cursor
+      row, col = yield($curwin.cursor)
+      $curwin.cursor = [row, col]
+    end
+
     # Public: Move lines (<line_start> .. <line_end>) after line <append_to>
     def move_lines(line_start, line_end, append_to)
       VIM::message("Moving L:#{line_start}-#{line_end} after L:#{append_to}")
@@ -184,9 +190,11 @@ module TomatoMd
 
   class RewriteRulers
     include TomatoMd::Helper
+    SEPARATOR = '# ========'
 
     def run
       delete_separators
+      add_separators
     end
 
     private
@@ -196,10 +204,25 @@ module TomatoMd
       while (line_num <= $curbuf.length) do
         if $curbuf[line_num] =~ TomatoMd::PATTERNS[:day_separator]
           $curbuf.delete(line_num)
+          $curbuf.delete(line_num) if $curbuf[line_num].empty?
         else
           line_num += 1
         end
       end
+    end
+
+    def add_separators
+      pat_tomatos = TomatoMd::PATTERNS[:tomatos]
+
+      before, _ = find_matching_line(pat_tomatos)
+      $curbuf.append(before - 1, '')
+      $curbuf.append(before - 1, SEPARATOR)
+      update_cursor {|row, col| [row + 2, col] }
+
+      after,  _ = find_matching_line(pat_tomatos, :direction => :down)
+      $curbuf.append(after  - 1, '')
+      $curbuf.append(after  - 1, SEPARATOR)
+      update_cursor {|row, col| [row + 2, col] }
     end
   end
 end
