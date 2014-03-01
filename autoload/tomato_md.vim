@@ -13,8 +13,22 @@ module TomatoMd
     #
     # Returns an array of [line number, matched string]
     def find_matching_line(pattern, options = {})
+      find_line(options) {|line| line !~ pattern }
+    end
+
+    def find_exact_line(target_line, options = {})
+      line_number, _ = find_line(options) {|line| line.strip == target_line.strip }
+      line_number
+    end
+
+    # Internal: Find line that matches the given block.
+    def find_line(options)
       line_number = options[:start] || $curbuf.line_number
-      while ((line_number > 0) && (line_number <= $curbuf.count) && $curbuf[line_number] !~ pattern)
+      while (
+        (line_number > 0) &&
+          (line_number <= $curbuf.count) &&
+          yield($curbuf[line_number])
+      )
         if options[:direction] == :down
           line_number += 1
         else
@@ -143,7 +157,7 @@ EOC
 endfunction
 
 " Postpone visual-selected text to the next day.
-function! tomato_md#postpone() range
+function! tomato_md#postpone4() range
 ruby << EOC
   include TomatoMd::Helper
 
@@ -163,6 +177,8 @@ ruby << EOC
     $curwin.cursor = [row + n_lines, col]
   end
 
+  # Public: Find first subsection line from tommorrow area.
+  # Returns found line number.
   def find_append_target
     pat_tomatos = TomatoMd::PATTERNS[:tomatos]
 
@@ -173,6 +189,12 @@ ruby << EOC
 
     target = sub_section_line - 1
     $curbuf[target].empty? ? (target - 1) : target
+  end
+
+  # Public: Find the subsection until it reaches the end of the day.
+  # Returns found line number. nil if not found.
+  def find_merge_target(subsection, start_line)
+    #TODO
   end
 
   move_lines(
