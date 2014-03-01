@@ -7,6 +7,7 @@ module TomatoMd
   PATTERNS = {
     :tomatos => /\((done:[\d\.]+,.*total:[\d\.]+)\)/,
     :day => /^# /,
+    :ranges => /(([\d\.]+m?\-[\d\.]+m?)(\s*,\s*[\d\.]+m?\-[\d\.]+m?)*)/,
   }.freeze
 
   module Helper
@@ -61,121 +62,131 @@ module TomatoMd
       line_number
     end
   end
+
+  class RewriteDayHeader
+    include TomatoMd::Helper
+
+    def initialize
+      @now_pivot = nil
+    end
+
+    def run
+      pat_tomatos = TomatoMd::PATTERNS[:tomatos]
+
+      line_number, match_data = find_matching_line(pat_tomatos)
+
+      if line_number > 0
+        line = $curbuf[line_number]
+        counts = count_tomatos(line_number)
+        ranges = parse_ranges(line)
+        VIM::message("now %s, (past %s hrs + future %s hrs) = %s hrs" % [
+          now_pivot, ranges[:past], ranges[:future], ranges[:total]
+        ])
+
+        values = {}
+        match_data.split(',').map {|part| part.split(':').map(&:strip) }.
+          each do |key, val|
+            values[key.to_sym] = val
+          end
+
+        values.merge!(counts).merge!(
+          :total =>  ranges[:total]  * 2,
+          :lost  => (ranges[:past]   * 2 - counts[:done]),
+          :free  => (ranges[:future] * 2 - counts[:todo])
+        )
+        replace_line(pat_tomatos, values, line_number)
+      else
+        VIM::message("No status found.")
+      end
+    end
+
+    private
+
+    # Internal: Count number of done, todo pomodoros.
+    def count_tomatos(start_line_number)
+      another_day = TomatoMd::PATTERNS[:day]
+      done = /\[x\]/
+      todo = /\[@?\]/
+
+      ln = start_line_number + 1
+      line = $curbuf[ln]
+
+      counts = { :done => 0, :todo => 0 }
+      while line && !(line =~ another_day)
+        counts[:done] += line.scan(done).size
+        counts[:todo] += line.scan(todo).size
+        ln += 1
+        line = $curbuf[ln] rescue break
+      end
+
+      counts
+    end
+
+    # Internal: Parse time ranges
+    def parse_ranges(line, total_only = false)
+      results = {}
+      if line.empty?
+        results[:total] = 0
+      elsif line =~ TomatoMd::PATTERNS[:ranges]
+        str = $1
+        str_ranges = str.gsub('m', '.5').split(',')
+        results[:total] = str_ranges.map {|range| eval(range)}.inject(&:+).abs
+
+        unless total_only
+          timeframes = str_ranges.map {|r| r.split('-').map(&:to_f) }
+          ranges = timeframes.map {|(s,e)| (s .. e) }
+
+          past_line = make_past_ranges(str_ranges, ranges).join(',')
+
+          results[:past] = parse_ranges(past_line, true)[:total]
+          results[:future] = results[:total] - results[:past]
+        end
+      else
+        VIM::message("No hours found for: #{line}")
+      end
+      results
+    end
+
+    # Internal
+    def make_past_ranges(str_ranges, ranges)
+      index = -1
+      current_range = ranges.find {|range| index += 1; range.include?(now_pivot) }
+
+      if current_range
+        past_ranges = index.zero? ? [] : str_ranges[0 .. (index - 1)]
+        past_ranges << [current_range.begin, now_pivot].join('-')
+      else
+        num_ranges = ranges.select {|range| range.end < now_pivot }.size
+        num_ranges.zero? ? [] : str_ranges[0 .. (num_ranges - 1)]
+      end
+    end
+
+    # Rounded number of now (e.g. 10.5, 11)
+    def now_pivot
+      @now_pivot ||= begin
+        now = Time.now
+        minor = ((now.min / 60.0) * 2).round / 2.0  # 0.0 or 0.5 or 1.0
+        now.hour + minor
+      end
+    end
+
+    # Replace line with updated values.
+    def replace_line(pat_tomatos, values, line_number)
+      parts =
+        %w[done lost todo free total].map do |key|
+          "#{key}:#{values[key.to_sym].round}"
+        end
+      updated = "(%s)" % parts.join(', ')
+      $curbuf[line_number] = $curbuf[line_number].gsub(pat_tomatos, updated)
+    end
+  end
 end
 EOC
 
 " Rewrite header line.
 function! tomato_md#rewrite()
 ruby << EOC
-  include TomatoMd::Helper
-
-  pat_tomatos = TomatoMd::PATTERNS[:tomatos]
-  @pat_ranges = /(([\d\.]+m?\-[\d\.]+m?)(\s*,\s*[\d\.]+m?\-[\d\.]+m?)*)/
-  @now_pivot = nil
-
-  # Count number of done, todo pomodoros.
-  def count_tomatos(start_line_number)
-    another_day = TomatoMd::PATTERNS[:day]
-    done = /\[x\]/
-    todo = /\[@?\]/
-
-    ln = start_line_number + 1
-    line = $curbuf[ln]
-
-    counts = { :done => 0, :todo => 0 }
-    while line && !(line =~ another_day)
-      counts[:done] += line.scan(done).size
-      counts[:todo] += line.scan(todo).size
-      ln += 1
-      line = $curbuf[ln] rescue break
-    end
-
-    counts
-  end
-
-  # Parse time ranges
-  def parse_ranges(line, total_only = false)
-    results = {}
-    if line.empty?
-      results[:total] = 0
-    elsif line =~ @pat_ranges
-      str = $1
-      str_ranges = str.gsub('m', '.5').split(',')
-      results[:total] = str_ranges.map {|range| eval(range)}.inject(&:+).abs
-
-      unless total_only
-        timeframes = str_ranges.map {|r| r.split('-').map(&:to_f) }
-        ranges = timeframes.map {|(s,e)| (s .. e) }
-
-        past_line = make_past_ranges(str_ranges, ranges).join(',')
-
-        results[:past] = parse_ranges(past_line, true)[:total]
-        results[:future] = results[:total] - results[:past]
-      end
-    else
-      VIM::message("No hours found for: #{line}")
-    end
-    results
-  end
-
-  # Internal
-  def make_past_ranges(str_ranges, ranges)
-    index = -1
-    current_range = ranges.find {|range| index += 1; range.include?(now_pivot) }
-
-    if current_range
-      past_ranges = index.zero? ? [] : str_ranges[0 .. (index - 1)]
-      past_ranges << [current_range.begin, now_pivot].join('-')
-    else
-      num_ranges = ranges.select {|range| range.end < now_pivot }.size
-      num_ranges.zero? ? [] : str_ranges[0 .. (num_ranges - 1)]
-    end
-  end
-
-  # Rounded number of now (e.g. 10.5, 11)
-  def now_pivot
-    @now_pivot ||= begin
-      now = Time.now
-      minor = ((now.min / 60.0) * 2).round / 2.0  # 0.0 or 0.5 or 1.0
-      now.hour + minor
-    end
-  end
-
-  # Replace line with updated values.
-  def replace_line(pat_tomatos, values, line_number)
-    parts =
-      %w[done lost todo free total].map do |key|
-        "#{key}:#{values[key.to_sym].round}"
-      end
-    updated = "(%s)" % parts.join(', ')
-    $curbuf[line_number] = $curbuf[line_number].gsub(pat_tomatos, updated)
-  end
-
-  line_number, match_data = find_matching_line(pat_tomatos)
-
-  if line_number > 0
-    line = $curbuf[line_number]
-    counts = count_tomatos(line_number)
-    ranges = parse_ranges(line)
-    VIM::message("now %s, (past %s hrs + future %s hrs) = %s hrs" % [
-      now_pivot, ranges[:past], ranges[:future], ranges[:total]
-    ])
-
-    values = {}
-    match_data.split(',').map {|part| part.split(':').map(&:strip) }.
-      each do |key, val|
-        values[key.to_sym] = val
-      end
-
-    values.merge!(counts).merge!(
-      :total =>  ranges[:total]  * 2,
-      :lost  => (ranges[:past]   * 2 - counts[:done]),
-      :free  => (ranges[:future] * 2 - counts[:todo])
-    )
-    replace_line(pat_tomatos, values, line_number)
-  else
-    VIM::message("No status found.")
-  end
+  TomatoMd::RewriteDayHeader.new.run
 EOC
 endfunction
 
