@@ -10,6 +10,22 @@ module TomatoMd
   }.freeze
 
   module Helper
+    # Public: Move lines (<line_start> .. <line_end>) after line <append_to>
+    def move_lines(line_start, line_end, append_to)
+      VIM::message("Moving L:#{line_start}-#{line_end} after L:#{append_to}")
+      range = (line_start .. line_end)
+      n_lines = line_end - line_start
+      lines = range.map {|n| $curbuf[n] }
+      range.each {|n| $curbuf.delete(line_start) }
+
+      (0 .. n_lines).each do |line_num|
+        $curbuf.append(append_to + line_num, lines[line_num])
+      end
+
+      row, col = $curwin.cursor
+      $curwin.cursor = [row + n_lines, col]
+    end
+
     # Public: Find specified pattern.
     #
     # Returns an array of [line number, matched string]
@@ -29,7 +45,7 @@ module TomatoMd
       [line_number, $1]
     end
 
-    # Internal: Find line that matches the given block.
+    # Public: Find line that matches the given block.
     def find_line(options)
       line_number = options[:start] || $curbuf.line_number
       while (
@@ -164,25 +180,9 @@ EOC
 endfunction
 
 " Postpone visual-selected text to the next day.
-function! tomato_md#fpostpone() range
+function! tomato_md#postpone() range
 ruby << EOC
   include TomatoMd::Helper
-
-  # Public: Move lines (<line_start> .. <line_end>) after line <append_to>
-  def move_lines(line_start, line_end, append_to)
-    VIM::message("Moving L:#{line_start}-#{line_end} after L:#{append_to}")
-    range = (line_start .. line_end)
-    n_lines = line_end - line_start
-    lines = range.map {|n| $curbuf[n] }
-    range.each {|n| $curbuf.delete(line_start) }
-
-    (0 .. n_lines).each do |line_num|
-      $curbuf.append(append_to + line_num, lines[line_num])
-    end
-
-    row, col = $curwin.cursor
-    $curwin.cursor = [row + n_lines, col]
-  end
 
   # Public: Find first subsection line from tommorrow area.
   # Returns found line number.
