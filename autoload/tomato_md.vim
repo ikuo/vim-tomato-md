@@ -153,7 +153,7 @@ EOC
 endfunction
 
 " Postpone visual-selected text to the next day.
-function! tomato_md#dpostpone() range
+function! tomato_md#cpostpone() range
 ruby << EOC
   include TomatoMd::Helper
 
@@ -192,29 +192,31 @@ ruby << EOC
   def find_merge_target(subsection, start_line)
     line_number, _ =
       find_line(:direction => :down, :start => start_line) do |line|
-        VIM::message(line)
         (line == subsection) ||
           (line =~ TomatoMd::PATTERNS[:day])
       end
-    VIM::message("subsection,start_line=#{subsection}, #{start_line}")
 
     ($curbuf[line_number] == subsection) ? line_number : nil
   end
 
-  append_target = find_append_target
-
-  first_line = VIM::evaluate('a:firstline')
-  merge_target = find_merge_target($curbuf[first_line], append_target + 1)
-  VIM::message("merge_target=#{merge_target}")
-  if merge_target
-    append_target = merge_target
+  def merge_if_possible(first_line, last_line, append_target)
+    merge_target = find_merge_target($curbuf[first_line], append_target + 1)
+    if merge_target
+      $curbuf.delete(first_line)  # delete duplicate subsection header
+      last_line = last_line - 1
+      append_target = merge_target
+    end
+    [first_line, last_line, append_target]
   end
 
-  move_lines(
-    first_line,
-    VIM::evaluate('a:lastline'),
-    append_target
-  )
+  first_line, last_line, append_target =
+    merge_if_possible(
+      VIM::evaluate('a:firstline'),
+      VIM::evaluate('a:lastline'),
+      find_append_target
+    )
+
+  move_lines(first_line, last_line, append_target)
 EOC
 endfunction
 
