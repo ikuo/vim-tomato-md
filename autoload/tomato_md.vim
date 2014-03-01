@@ -236,6 +236,14 @@ ruby << EOC
 EOC
 endfunction
 
+" Mark current task as complete.
+function! tomato_md#complete()
+ruby << EOC
+  new_line = $curbuf.line.gsub('[@]', '[x]')
+  $curbuf.line = new_line if (new_line != $curbuf.line)
+EOC
+endfunction
+
 " Postpone visual-selected text to the next day.
 function! tomato_md#postpone() range
 ruby << EOC
