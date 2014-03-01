@@ -8,6 +8,7 @@ module TomatoMd
     :tomatos => /\((done:[\d\.]+,.*total:[\d\.]+)\)/,
     :day => /^# /,
     :ranges => /(([\d\.]+m?\-[\d\.]+m?)(\s*,\s*[\d\.]+m?\-[\d\.]+m?)*)/,
+    :day_separator => /^# ====/
   }.freeze
 
   module Helper
@@ -180,6 +181,27 @@ module TomatoMd
       $curbuf[line_number] = $curbuf[line_number].gsub(pat_tomatos, updated)
     end
   end
+
+  class RewriteRulers
+    include TomatoMd::Helper
+
+    def run
+      delete_separators
+    end
+
+    private
+
+    def delete_separators
+      line_num = 1
+      while (line_num <= $curbuf.length) do
+        if $curbuf[line_num] =~ TomatoMd::PATTERNS[:day_separator]
+          $curbuf.delete(line_num)
+        else
+          line_num += 1
+        end
+      end
+    end
+  end
 end
 EOC
 
@@ -187,6 +209,7 @@ EOC
 function! tomato_md#rewrite()
 ruby << EOC
   TomatoMd::RewriteDayHeader.new.run
+  TomatoMd::RewriteRulers.new.run
 EOC
 endfunction
 
