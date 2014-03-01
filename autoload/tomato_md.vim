@@ -6,6 +6,7 @@ ruby << EOC
 module TomatoMd
   PATTERNS = {
     :tomatos => /\((done:[\d\.]+,.*total:[\d\.]+)\)/,
+    :day => /^# /,
   }.freeze
 
   module Helper
@@ -13,12 +14,7 @@ module TomatoMd
     #
     # Returns an array of [line number, matched string]
     def find_matching_line(pattern, options = {})
-      find_line(options) {|line| line !~ pattern }
-    end
-
-    def find_exact_line(target_line, options = {})
-      line_number, _ = find_line(options) {|line| line.strip == target_line.strip }
-      line_number
+      find_line(options) {|line| line =~ pattern }
     end
 
     # Internal: Find line that matches the given block.
@@ -27,7 +23,7 @@ module TomatoMd
       while (
         (line_number > 0) &&
           (line_number <= $curbuf.count) &&
-          yield($curbuf[line_number])
+          !yield($curbuf[line_number])
       )
         if options[:direction] == :down
           line_number += 1
@@ -52,7 +48,7 @@ ruby << EOC
 
   # Count number of done, todo pomodoros.
   def count_tomatos(start_line_number)
-    another_day = /^# /
+    another_day = TomatoMd::PATTERNS[:day]
     done = /\[x\]/
     todo = /\[@?\]/
 
@@ -157,7 +153,7 @@ EOC
 endfunction
 
 " Postpone visual-selected text to the next day.
-function! tomato_md#postpone4() range
+function! tomato_md#dpostpone() range
 ruby << EOC
   include TomatoMd::Helper
 
@@ -194,13 +190,30 @@ ruby << EOC
   # Public: Find the subsection until it reaches the end of the day.
   # Returns found line number. nil if not found.
   def find_merge_target(subsection, start_line)
-    #TODO
+    line_number, _ =
+      find_line(:direction => :down, :start => start_line) do |line|
+        VIM::message(line)
+        (line == subsection) ||
+          (line =~ TomatoMd::PATTERNS[:day])
+      end
+    VIM::message("subsection,start_line=#{subsection}, #{start_line}")
+
+    ($curbuf[line_number] == subsection) ? line_number : nil
+  end
+
+  append_target = find_append_target
+
+  first_line = VIM::evaluate('a:firstline')
+  merge_target = find_merge_target($curbuf[first_line], append_target + 1)
+  VIM::message("merge_target=#{merge_target}")
+  if merge_target
+    append_target = merge_target
   end
 
   move_lines(
-    VIM::evaluate('a:firstline'),
+    first_line,
     VIM::evaluate('a:lastline'),
-    find_append_target
+    append_target
   )
 EOC
 endfunction
