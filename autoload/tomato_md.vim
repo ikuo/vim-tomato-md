@@ -6,15 +6,36 @@ ruby << EOC
 module TomatoMd
   PATTERNS = {
     :tomatos => /\((done:[\d\.]+,.*total:[\d\.]+)\)/,
+    :day => /^# /,
   }.freeze
 
   module Helper
+    # Public: Move lines (<line_start> .. <line_end>) after line <append_to>
+    def move_lines(line_start, line_end, append_to)
+      VIM::message("Moving L:#{line_start}-#{line_end} after L:#{append_to}")
+      range = (line_start .. line_end)
+      n_lines = line_end - line_start
+      lines = range.map {|n| $curbuf[n] }
+      range.each {|n| $curbuf.delete(line_start) }
+
+      (0 .. n_lines).each do |line_num|
+        $curbuf.append(append_to + line_num, lines[line_num])
+      end
+
+      row, col = $curwin.cursor
+      $curwin.cursor = [row + n_lines, col]
+    end
+
     # Public: Find specified pattern.
     #
     # Returns an array of [line number, matched string]
     def find_matching_line(pattern, options = {})
       line_number = options[:start] || $curbuf.line_number
-      while ((line_number > 0) && (line_number <= $curbuf.count) && $curbuf[line_number] !~ pattern)
+      while (
+        (line_number > 0) &&
+          (line_number <= $curbuf.count) &&
+          ($curbuf[line_number] !~ pattern)
+      )
         if options[:direction] == :down
           line_number += 1
         else
@@ -22,6 +43,22 @@ module TomatoMd
         end
       end
       [line_number, $1]
+    end
+
+    # Public: Find line that matches the given block.
+    def find_line(options)
+      line_number = options[:start] || $curbuf.line_number
+      while (
+        (line_number > 0) && (line_number <= $curbuf.count) &&
+          !yield($curbuf[line_number])
+      )
+        if options[:direction] == :down
+          line_number += 1
+        else
+          line_number -= 1
+        end
+      end
+      line_number
     end
   end
 end
@@ -38,7 +75,7 @@ ruby << EOC
 
   # Count number of done, todo pomodoros.
   def count_tomatos(start_line_number)
-    another_day = /^# /
+    another_day = TomatoMd::PATTERNS[:day]
     done = /\[x\]/
     todo = /\[@?\]/
 
@@ -147,22 +184,8 @@ function! tomato_md#postpone() range
 ruby << EOC
   include TomatoMd::Helper
 
-  # Public: Move lines (<line_start> .. <line_end>) after line <append_to>
-  def move_lines(line_start, line_end, append_to)
-    VIM::message("Moving L:#{line_start}-#{line_end} after L:#{append_to}")
-    range = (line_start .. line_end)
-    n_lines = line_end - line_start
-    lines = range.map {|n| $curbuf[n] }
-    range.each {|n| $curbuf.delete(line_start) }
-
-    (0 .. n_lines).each do |line_num|
-      $curbuf.append(append_to + line_num, lines[line_num])
-    end
-
-    row, col = $curwin.cursor
-    $curwin.cursor = [row + n_lines, col]
-  end
-
+  # Public: Find first subsection line from tommorrow area.
+  # Returns found line number.
   def find_append_target
     pat_tomatos = TomatoMd::PATTERNS[:tomatos]
 
@@ -175,11 +198,36 @@ ruby << EOC
     $curbuf[target].empty? ? (target - 1) : target
   end
 
-  move_lines(
-    VIM::evaluate('a:firstline'),
-    VIM::evaluate('a:lastline'),
-    find_append_target
-  )
+  # Public: Find the subsection until it reaches the end of the day.
+  # Returns found line number. nil if not found.
+  def find_merge_target(subsection, start_line)
+    line_number =
+      find_line(:direction => :down, :start => start_line) do |line|
+        (line == subsection) ||
+          (line =~ TomatoMd::PATTERNS[:day])
+      end
+
+    ($curbuf[line_number] == subsection) ? line_number : nil
+  end
+
+  def merge_if_possible(first_line, last_line, append_target)
+    merge_target = find_merge_target($curbuf[first_line], append_target + 1)
+    if merge_target
+      $curbuf.delete(first_line)  # delete duplicate subsection header
+      last_line = last_line - 1
+      append_target = merge_target
+    end
+    [first_line, last_line, append_target]
+  end
+
+  first_line, last_line, append_target =
+    merge_if_possible(
+      VIM::evaluate('a:firstline'),
+      VIM::evaluate('a:lastline'),
+      find_append_target
+    )
+
+  move_lines(first_line, last_line, append_target)
 EOC
 endfunction
 
