@@ -220,8 +220,8 @@ module TomatoMd
     def run
       preserve_cursor_position do
         delete_separators
-        add_separators
       end
+      add_separators
     end
 
     private
@@ -241,9 +241,11 @@ module TomatoMd
     def add_separators
       pat_tomatos = TomatoMd::PATTERNS[:tomatos]
 
-      before, _ = find_matching_line(pat_tomatos)
-      $curbuf.append(before - 1, '')
-      $curbuf.append(before - 1, SEPARATOR)
+      preserve_cursor_position do
+        before, _ = find_matching_line(pat_tomatos)
+        $curbuf.append(before - 1, '')
+        $curbuf.append(before - 1, SEPARATOR)
+      end
 
       after,  _ = find_matching_line(pat_tomatos, :direction => :down)
       $curbuf.append(after  - 1, '')
