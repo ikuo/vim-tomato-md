@@ -2,7 +2,7 @@ vim-tomato-md
 =============
 
 A Vim plugin to write daily pomodoro memo in markdown.
-It counts total pomodoros in `daily.md` and update done/todo/free/total numbers.
+It counts total pomodoros in `daily.md` and update todo/free/total numbers.
 
 # Requirements
 - [NeoBundle](https://github.com/Shougo/neobundle.vim)
@@ -40,7 +40,7 @@ Save the following markdown as `daily.md` into your favorite directory:
 
 ```md
 # ====
-# 10/31 Mon 9m-11, 12-18m (done:0, lost:0, todo:0, free:0, total:0)
+# 10/31 Mon 9m-11, 12-18m (todo:0, free:0, total:0)
 - Task1 [@][]
 - Task2 [][][]
 
@@ -48,7 +48,7 @@ Save the following markdown as `daily.md` into your favorite directory:
 ```
 
 Write your daily.md according to the format described in the following section.
-When you type Ctrl-p, counts of done/todo pomodoros will be updated in the day header.
+When you type Ctrl-p, counts of todo pomodoros will be updated in the day header.
 
 ## Format of daily.md
 `daily.md` describes a list of day sections. Each day section has pomodoros.
@@ -63,7 +63,7 @@ The line begins with `# ====` separates days.
 Each day has a header line of the following format:
 
 ```md
-# <any date string> <time spans to work> (done:0, lost:0, todo:0, free:0, total:0)
+# <any date string> <time spans to work> (todo:0, free:0, total:0)
 ```
 
 <time spans to work> is a comma separated list of a time span of the format "<begin>`-`<end>".
@@ -72,8 +72,6 @@ For example `9m-11, 12-18m` means that "I'm going to work 9:30 to 11:00, and 12:
 
 The meanings of elements of the latter part are:
 
-- `done`: Number of finished pomodoros (Count of `[x]`)
-- `lost`: (todo: document it)
 - `todo`: Number of pomodoros to do (Count of `[]`)
 - `free`: Number of pomodoros that can be done in the rest of this day.
 - `total`: Number of pomodoros that can be done in this day.

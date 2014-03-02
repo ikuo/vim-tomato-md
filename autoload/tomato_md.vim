@@ -5,7 +5,7 @@ set cpo&vim
 ruby << EOC
 module TomatoMd
   PATTERNS = {
-    :tomatos => /\((done:[\d\.]+,.*total:[\d\.]+)\)/,
+    :tomatos => /\((todo:[\d\.]+,.*total:[\d\.]+)\)/,
     :day => /^# /,
     :ranges => /(([\d\.]+m?\-[\d\.]+m?)(\s*,\s*[\d\.]+m?\-[\d\.]+m?)*)/,
     :day_separator => /^# ====/
@@ -98,7 +98,6 @@ module TomatoMd
 
         values.merge!(counts).merge!(
           :total =>  ranges[:total]  * 2,
-          :lost  => (ranges[:past]   * 2 - counts[:done]),
           :free  => (ranges[:future] * 2 - counts[:todo])
         )
         replace_line(pat_tomatos, values, line_number)
@@ -109,18 +108,16 @@ module TomatoMd
 
     private
 
-    # Internal: Count number of done, todo pomodoros.
+    # Internal: Count number of todo pomodoros.
     def count_tomatos(start_line_number)
       another_day = TomatoMd::PATTERNS[:day]
-      done = /\[x\]/
       todo = /\[@?\]/
 
       ln = start_line_number + 1
       line = $curbuf[ln]
 
-      counts = { :done => 0, :todo => 0 }
+      counts = { :todo => 0 }
       while line && !(line =~ another_day)
-        counts[:done] += line.scan(done).size
         counts[:todo] += line.scan(todo).size
         ln += 1
         line = $curbuf[ln] rescue break
@@ -180,7 +177,7 @@ module TomatoMd
     # Replace line with updated values.
     def replace_line(pat_tomatos, values, line_number)
       parts =
-        %w[done lost todo free total].map do |key|
+        %w[todo free total].map do |key|
           "#{key}:#{values[key.to_sym].round}"
         end
       updated = "(%s)" % parts.join(', ')
