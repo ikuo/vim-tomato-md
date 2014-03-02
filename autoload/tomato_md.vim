@@ -18,6 +18,25 @@ module TomatoMd
       $curwin.cursor = [row, col]
     end
 
+    # Public: Update cursor to the target line.
+    def update_cursor_to(target_line)
+      rows = [
+        find_line(:direction => :up)   {|line| line == target_line },
+        find_line(:direction => :down) {|line| line == target_line },
+      ]
+      distance = rows.map {|row| (row - $curbuf.line_number).abs }
+      target_row = (distance[0] < distance[1]) ? rows[0] : rows[1]
+
+      update_cursor {|row, col| [target_row, col] }
+    end
+
+    # Public: Let cursor position follow the chang of the give block.
+    def preserve_cursor_position
+      cursor_line = $curbuf.line
+      yield
+      update_cursor_to(cursor_line)
+    end
+
     # Public: Move lines (<line_start> .. <line_end>) after line <append_to>
     def move_lines(line_start, line_end, append_to)
       VIM::message("Moving L:#{line_start}-#{line_end} after L:#{append_to}")
@@ -54,6 +73,15 @@ module TomatoMd
     end
 
     # Public: Find line that matches the given block.
+    #
+    # Examples:
+    #
+    #   find_line(:direction => :down) do |line|
+    #     (line == '# ========')
+    #   end
+    #   # => 15
+    #
+    # Returns number of the matched line.
     def find_line(options)
       line_number = options[:start] || $curbuf.line_number
       while (
@@ -190,8 +218,10 @@ module TomatoMd
     SEPARATOR = '# ========'
 
     def run
-      delete_separators
-      add_separators
+      preserve_cursor_position do
+        delete_separators
+        add_separators
+      end
     end
 
     private
@@ -214,12 +244,10 @@ module TomatoMd
       before, _ = find_matching_line(pat_tomatos)
       $curbuf.append(before - 1, '')
       $curbuf.append(before - 1, SEPARATOR)
-      update_cursor {|row, col| [row + 2, col] }
 
       after,  _ = find_matching_line(pat_tomatos, :direction => :down)
       $curbuf.append(after  - 1, '')
       $curbuf.append(after  - 1, SEPARATOR)
-      update_cursor {|row, col| [row + 2, col] }
     end
   end
 end
